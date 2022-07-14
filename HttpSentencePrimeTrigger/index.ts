@@ -18,9 +18,9 @@ const httpTrigger: AzureFunction = async function (context: Context, req: HttpRe
     let binaryText = text2BinaryString(queryText);
     let bigIntFromText = binaryText2BigInt(binaryText);
     
-    context.log(`text: ${queryText}`)
-    context.log(`InputNum: ${bigIntFromText}`)
-    const messageInfo = `Binary: ${binaryText}\nNumber: ${bigIntFromText}\n`
+    console.log(`text: ${queryText}`)
+    console.log(`InputNum: ${bigIntFromText}`)
+    const messageInfo = `Text value: ${bigIntFromText}\n`
 
     if (isEven(bigIntFromText)) {
         context.res = {
@@ -33,15 +33,12 @@ const httpTrigger: AzureFunction = async function (context: Context, req: HttpRe
     
     // If the text is an odd number begin checking for primality
     let probablyPrime = true;
-    if (bigIntFromText % 3n == 0n){
-        probablyPrime = false;
-    }
-    if (bigIntFromText % 5n == 0n){
-        probablyPrime = false;
-    }
 
-    probablyPrime = millerRabinTest(bigIntFromText,context);
-    
+    probablyPrime = testSimpleDivisions(bigIntFromText);
+
+    if(probablyPrime){
+        probablyPrime = millerRabinTest(bigIntFromText);
+    }
 
     responseMessage = probablyPrime ? `I'm feeling some primality in your text...` : "Your text is inferior.";
 
@@ -61,11 +58,31 @@ function binaryText2BigInt(binText: string): bigint {
     return BigInt(`0b${binText}`);
 }
 
-function isEven(num: bigint): boolean{
+function isEven(num: bigint): boolean {
     return num % 2n === 0n;
 }
 
-function millerRabinTest(num: bigint, context): boolean {
+function testSimpleDivisions(num: bigint): boolean {
+    if (num % 3n == 0n){
+        return false;
+    }
+    if (num % 5n == 0n){
+        return false;
+    }
+    if (num % 7n == 0n){
+        return false;
+    }
+    if (num % 11n == 0n){
+        return false;
+    }
+    if (num % 13n == 0n){
+        return false;
+    }
+
+    return true
+}
+
+function millerRabinTest(num: bigint): boolean {
     let probPrime = true;
 
     const PrimeWitnesses = [2n, 3n, 5n, 7n, 11n, 13n, 17n, 19n, 23n, 29n, 31n, 37n, 41n, 43n, 47n, 53n, 59n, 61n, 67n, 71n, 73n, 79n, 83n, 89n, 97n];
@@ -85,22 +102,65 @@ function millerRabinTest(num: bigint, context): boolean {
         // I'm going to be using a list of prime integers up to 100
         // x = a^d mod n
         let a = PrimeWitnesses[witnessPointer];
-        if(a >= num - 1n){
+        if(a >= num - 2n){
             break;
         }
-        //context.log(`a:${a} ** d:${d}`);
-        //context.log(`= ${a**d}`);
-        let x = a**d % num; 
-        
+        console.log(`a:${a}  d:${d}  s:${s}`);
+
+        //let x = a**d % num; 
+        let x = bigPowerModulo(a, d, num);
+
         // if x == 1 or x == n-1 then it's maybe prime
-        if ( !(x === 1n || x === num-1n) ){
+        if ( x == 1n || x == num-1n ){
+            probPrime = true;
+        }
+        else{
             probPrime = false;
+
+            // Repeat s-1 times
+            // x = x^2 mod n
+            // if x == n - 1 then continue witness loop
+            for(let i = 1; i <= s - 1n; i++){
+                x = x**2n % num;
+                if(x == num - 1n){
+                    probPrime = true;
+                    break;
+                }
+            }
+
         }
 
         witnessPointer++;
     }
 
     return probPrime;
+}
+
+function bigPowerModulo(base: bigint, power: bigint, mod: bigint): bigint {
+    let powerIncrement = 10000n;
+    powerIncrement = (power < powerIncrement) ? power : powerIncrement; //if the power is less than this increment, change it to the power.
+    let result = base;
+    //console.log("increment: " + powerIncrement);
+    console.log("witness num: " + result);
+    // Num will always be less than mod on first run
+    let tally = 0
+    while (power > 0){
+        //result = (result * (result**powerIncrement % mod)) % mod;
+        result = result**powerIncrement % mod;
+        //console.log("result: " + result);
+        //power = power >= powerIncrement ? power - powerIncrement : power; // If there is enough power left, increment by the power, otherwise just take what is left.
+        power = power - powerIncrement;
+        //if remaining power is less than the increment, update the incremental power to match power
+        powerIncrement = (power >= powerIncrement) ? powerIncrement : power;
+        tally++;
+        if(tally % 100 == 0){
+            console.log("power left: " + power);
+        }
+    }
+
+    //console.log("result: " + result);
+
+    return result;
 }
 
 export default httpTrigger;
